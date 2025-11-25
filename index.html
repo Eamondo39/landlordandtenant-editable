@@ -46,4 +46,262 @@ function renderSidebar() {
         const span = document.createElement('span');
         span.textContent = name;
         span.className = (name === currentPage) ? 'active' : '';
-        span.onclick = () => { currentPage = name; renderPage(); renderSidebar(); loadSettings(); }
+        span.onclick = () => { currentPage = name; renderPage(); renderSidebar(); loadSettings(); };
+        span.ondblclick = () => {
+            const newName = prompt('Enter new page name:', name);
+            if (newName && newName !== name) {
+                pages[newName] = pages[name];
+                pageSettings[newName] = pageSettings[name];
+                delete pages[name];
+                delete pageSettings[name];
+                currentPage = newName;
+                saveAll();
+                renderSidebar();
+                renderPage();
+                loadSettings();
+            }
+        };
+        li.appendChild(span);
+
+        // Delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '🗑';
+        deleteBtn.style.marginLeft = '6px';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            if(confirm(`Delete page "${name}"?`)) {
+                delete pages[name];
+                delete pageSettings[name];
+                saveAll();
+                if(currentPage === name) currentPage = Object.keys(pages)[0] || null;
+                renderSidebar();
+                renderPage();
+                loadSettings();
+            }
+        };
+        li.appendChild(deleteBtn);
+
+        ul.appendChild(li);
+    }
+}
+
+// Render page
+function renderPage() {
+    const content = document.getElementById('content');
+    content.innerHTML = '';
+    if (!currentPage) return;
+    pages[currentPage].forEach((html, index) => {
+        const div = document.createElement('div');
+        div.className = 'box';
+        div.contentEditable = true;
+
+        // Add inner HTML and buttons
+        div.innerHTML = html + `
+            <br>
+            <button onclick="addImage(this)">Add Image</button>
+            <button onclick="addDocument(this)">Add Document</button>
+            <button onclick="deleteBox(${index})" style="color:red;">Delete Box</button>
+        `;
+
+        div.draggable = true;
+        div.addEventListener('dragstart', dragStart);
+        div.addEventListener('dragover', dragOver);
+        div.addEventListener('drop', drop);
+        div.addEventListener('dragend', dragEnd);
+        content.appendChild(div);
+    });
+    applySettings();
+}
+
+// Delete box
+function deleteBox(index) {
+    if(!currentPage) return;
+    if(confirm('Delete this content box?')) {
+        pages[currentPage].splice(index, 1);
+        saveAll();
+        renderPage();
+    }
+}
+
+// Drag and drop
+let dragSrcEl = null;
+function dragStart(e) { dragSrcEl = this; e.dataTransfer.effectAllowed = 'move'; }
+function dragOver(e) { e.preventDefault(); if(this!==dragSrcEl) this.classList.add('drag-over'); }
+function drop(e) {
+    e.stopPropagation();
+    if(dragSrcEl!==this){
+        const parent = this.parentNode;
+        const children = Array.from(parent.children);
+        const srcIndex = children.indexOf(dragSrcEl);
+        const targetIndex = children.indexOf(this);
+        if(srcIndex < targetIndex) parent.insertBefore(dragSrcEl,this.nextSibling);
+        else parent.insertBefore(dragSrcEl,this);
+    }
+    this.classList.remove('drag-over');
+}
+function dragEnd(e){ document.querySelectorAll('.box').forEach(b=>b.classList.remove('drag-over')); }
+
+// Add page
+function addPage() {
+    const name = prompt('Enter new page name:');
+    if (name && !pages[name]) {
+        pages[name] = ['<h1>New Page</h1><p>Edit content...</p>'];
+        pageSettings[name] = {bgColor:'#ffffff', fontSize:16, customCSS:''};
+        currentPage = name;
+        saveAll();
+        renderSidebar();
+        renderPage();
+        loadSettings();
+    } else if (pages[name]) alert('Page name exists!');
+}
+
+// Add box
+function addBox() {
+    if(!currentPage) return alert('Create/select a page first.');
+    pages[currentPage].push('<p>New content box...</p>');
+    renderPage();
+}
+
+// Save page
+function savePage() {
+    if(!currentPage) return;
+    const boxes = document.querySelectorAll('#content .box');
+    pages[currentPage] = Array.from(boxes).map(box => box.innerHTML);
+    saveAll();
+    alert('Page saved!');
+}
+
+// Save all
+function saveAll(){
+    localStorage.setItem('pages', JSON.stringify(pages));
+    localStorage.setItem('pageSettings', JSON.stringify(pageSettings));
+}
+
+// Page settings
+function loadSettings(){
+    if(!currentPage) return;
+    const settings = pageSettings[currentPage] || {bgColor:'#ffffff', fontSize:16, customCSS:''};
+    document.getElementById('bgColor').value = settings.bgColor;
+    document.getElementById('fontSize').value = settings.fontSize;
+    document.getElementById('customCSS').value = settings.customCSS;
+    applySettings();
+}
+
+function updateSettings(){
+    if(!currentPage) return;
+    const bgColor = document.getElementById('bgColor').value;
+    const fontSize = document.getElementById('fontSize').value;
+    const customCSS = document.getElementById('customCSS').value;
+    pageSettings[currentPage] = {bgColor,fontSize,customCSS};
+    applySettings();
+    saveAll();
+}
+
+function applySettings(){
+    if(!currentPage) return;
+    const main = document.getElementById('mainContent');
+    const settings = pageSettings[currentPage];
+    main.style.background = settings.bgColor;
+    main.style.fontSize = settings.fontSize+'px';
+    let customStyle = document.getElementById('customPageStyle');
+    if(!customStyle){
+        customStyle = document.createElement('style');
+        customStyle.id = 'customPageStyle';
+        document.head.appendChild(customStyle);
+    }
+    customStyle.innerHTML = settings.customCSS;
+}
+
+// Add image
+function addImage(button) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = e => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = function(event){
+            const img = document.createElement('img');
+            img.src = event.target.result;
+            img.style.maxWidth = '100%';
+            button.parentElement.appendChild(img);
+        }
+        reader.readAsDataURL(file);
+    }
+    input.click();
+}
+
+// Add document for download
+function addDocument(button) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '*/*';
+    input.onchange = e => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = function(event){
+            const a = document.createElement('a');
+            a.href = event.target.result;
+            a.download = file.name;
+            a.textContent = `Download ${file.name}`;
+            a.style.display = 'block';
+            a.style.marginTop = '5px';
+            button.parentElement.appendChild(a);
+        }
+        reader.readAsDataURL(file);
+    }
+    input.click();
+}
+
+// Export pages
+function exportPages() {
+    savePage();
+    const template = (pageName, bodyContent, settings) => `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${pageName}</title>
+<link rel="stylesheet" href="style.css">
+<style>
+body{margin:0;font-family:Arial;background:${settings.bgColor};font-size:${settings.fontSize}px;}
+${settings.customCSS}
+</style>
+</head>
+<body>
+<div class="site-wrapper">
+  <div class="sidebar">
+    <img src="logo.png" alt="Logo">
+    <h2>My Site</h2>
+    <ul>
+      ${Object.keys(pages).map(name => `<li><a href="${name.replace(/\s+/g,'-')}.html">${name}</a></li>`).join('')}
+    </ul>
+  </div>
+  <main class="main">
+    ${bodyContent}
+  </main>
+</div>
+</body>
+</html>`;
+    
+    for(const name in pages){
+        const bodyContent = pages[name].map(html => `<div class="box">${html}</div>`).join('');
+        const htmlContent = template(name, bodyContent, pageSettings[name]);
+        const blob = new Blob([htmlContent], {type:'text/html'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name.replace(/\s+/g,'-')+'.html';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+    alert('All pages exported!');
+}
+
+renderSidebar();
+renderPage();
+loadSettings();
+</script>
+</body>
+</html>
