@@ -46,9 +46,4 @@ function renderSidebar() {
         const span = document.createElement('span');
         span.textContent = name;
         span.className = (name === currentPage) ? 'active' : '';
-        span.onclick = () => { currentPage = name; renderPage(); renderSidebar(); loadSettings(); };
-        span.ondblclick = () => {
-            const newName = prompt('Enter new page name:', name);
-            if (newName && newName !== name) {
-                pages[newName] = pages[name];
-                pageSettings[newName] = pageSettings[name]()
+        span.onclick = () => { currentPage = name; renderPage(); renderSidebar(); loadSettings(); }
