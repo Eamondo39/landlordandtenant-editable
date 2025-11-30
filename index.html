@@ -1,334 +1,374 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Landlord & Tenant Site Editor</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Landlord & Tenant — Site Editor</title>
+
+<!-- Google font -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
 <link rel="stylesheet" href="style.css">
-<style>
-/* Clear visual styling for delete buttons */
-.delete-page-btn {
-    background-color: transparent;
-    color: red;
-    border: none;
-    cursor: pointer;
-    font-size: 16px;
-    margin-left: 6px;
-}
-.delete-page-btn:hover {
-    color: darkred;
-}
-.delete-box-btn {
-    background-color: #ff4d4d;
-    color: white;
-    border: none;
-    cursor: pointer;
-    padding: 5px 10px;
-    margin-top: 5px;
-    border-radius: 4px;
-}
-.delete-box-btn:hover {
-    background-color: #cc0000;
-}
-</style>
 </head>
 <body>
-<div class="site-wrapper">
-  <div class="sidebar">
-    <img src="logo.png" alt="Logo">
-    <h2>My Site</h2>
-    <button onclick="addPage()">+ Add Page</button>
-    <button onclick="exportPages()">Export All Pages</button>
-    <ul id="pagesList"></ul>
 
-    <div class="settings" id="pageSettings">
-      <h3>Page Settings</h3>
-      <label>Background Color: <input type="color" id="bgColor" onchange="updateSettings()"></label>
-      <label>Font Size: <input type="number" id="fontSize" min="12" max="36" value="16" onchange="updateSettings()"> px</label>
-      <label>Custom CSS: <textarea id="customCSS" rows="4" style="width: 100%;" onchange="updateSettings()"></textarea></label>
-    </div>
+  <!-- Header with centered logo -->
+  <header class="header" role="banner">
+    <img src="logo.png" alt="Site logo" class="logo" />
+  </header>
+
+  <!-- Main container -->
+  <div class="container">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" aria-label="Site navigation">
+      <div style="text-align:center">
+        <p class="site-title">Landlord &amp; Tenant</p>
+      </div>
+
+      <div class="controls">
+        <button onclick="addPage()">+ New Page</button>
+        <button class="secondary" onclick="exportPages()">Export All</button>
+      </div>
+
+      <ul class="pages-list" id="pagesList"></ul>
+
+      <div class="settings" id="pageSettings">
+        <h4 style="margin:0 0 8px 0">Page Settings</h4>
+        <label>Background: <input type="color" id="bgColor" onchange="updateSettings()" /></label>
+        <label>Font size: <input type="number" id="fontSize" min="12" max="36" value="16" onchange="updateSettings()" /> px</label>
+        <label style="margin-top:6px">Custom CSS:</label>
+        <textarea id="customCSS" rows="4" style="width:100%;border-radius:6px;padding:8px" onchange="updateSettings()"></textarea>
+      </div>
+
+      <div style="margin-top:12px;text-align:center;color:#94a3b8;font-size:13px">
+        <div>Tip: double-click a page name to rename</div>
+      </div>
+    </aside>
+
+    <!-- Main editing area -->
+    <main class="main" id="mainContent" role="main">
+      <div class="top-actions">
+        <button class="save-btn" onclick="savePage()">Save</button>
+        <button class="add-box" onclick="addBox()">+ Add Box</button>
+        <div style="flex:1"></div>
+      </div>
+
+      <!-- Hero block (editable) -->
+      <div id="hero" class="hero" contenteditable="false">
+        <div>
+          <div class="title" id="heroTitle">Welcome</div>
+          <div class="subtitle" id="heroSubtitle">Click edit to change hero content</div>
+        </div>
+        <div>
+          <button class="btn secondary" onclick="editHero()">Edit Hero</button>
+        </div>
+      </div>
+
+      <!-- Content boxes -->
+      <div id="contentArea"></div>
+
+      <div class="footer">
+        © <span id="year"></span> Landlord &amp; Tenant • Editable site editor • Export to HTML
+      </div>
+    </main>
+
   </div>
-
-  <main class="main" id="mainContent">
-    <button class="save-btn" onclick="savePage()">Save Page</button>
-    <button class="save-btn" onclick="addBox()">+ Add Box</button>
-    <div id="content"></div>
-  </main>
-</div>
 
 <script>
-let pages = JSON.parse(localStorage.getItem('pages')) || {};
+/* ====== Data model (localStorage) and initial seed pages ====== */
+const seedPages = {
+  "Home": [
+    "<h1>Welcome to Landlord & Tenant Resources</h1><p class='muted'>This site provides practical information for landlords, tenants and surveyors. Click any card to edit, add images or documents, drag to reorder, and export pages to standalone HTML.</p>",
+    "<h2>Our Services</h2><p>Guidance on leases, dilapidations, assignments, lease renewals and expert surveying advice.</p>"
+  ],
+  "Landlord": [
+    "<h1>Information for Landlords</h1><p>General guidance on obligations, lease management, and enforcement. Use the boxes to store templates and notes.</p>"
+  ],
+  "Tenant": [
+    "<h1>Information for Tenants</h1><p>Rights and protections, assignments, alterations and renewal procedures.</p>"
+  ],
+  "Property Law": [
+    "<h1>Key Areas of Property Law</h1><p>Overview of the Law of Property Act 1925, LTA 1927, LTA 1954 and related legislation relevant to surveying.</p>"
+  ],
+  "Contact": [
+    "<h1>Contact</h1><p>Eamonn Devine<br/>Email: eamon.devine@hotmail.com</p>"
+  ]
+};
+
+let pages = JSON.parse(localStorage.getItem('pages')) || seedPages;
 let pageSettings = JSON.parse(localStorage.getItem('pageSettings')) || {};
-let currentPage = Object.keys(pages)[0] || null;
+// ensure settings exist for seeded pages
+for (const p of Object.keys(pages)) {
+  if (!pageSettings[p]) pageSettings[p] = { bgColor: "#ffffff", fontSize: 16, customCSS: "" };
+}
+let currentPage = Object.keys(pages)[0];
 
-// Render sidebar
-function renderSidebar() {
-    const ul = document.getElementById('pagesList');
-    ul.innerHTML = '';
-    for (const name in pages) {
-        const li = document.createElement('li');
+document.getElementById('year').textContent = new Date().getFullYear();
 
-        // Page name
-        const span = document.createElement('span');
-        span.textContent = name;
-        span.className = (name === currentPage) ? 'active' : '';
-        span.onclick = () => { currentPage = name; renderPage(); renderSidebar(); loadSettings(); };
-        span.ondblclick = () => {
-            const newName = prompt('Enter new page name:', name);
-            if (newName && newName !== name) {
-                pages[newName] = pages[name];
-                pageSettings[newName] = pageSettings[name];
-                delete pages[name];
-                delete pageSettings[name];
-                currentPage = newName;
-                saveAll();
-                renderSidebar();
-                renderPage();
-                loadSettings();
-            }
-        };
-        li.appendChild(span);
+/* ====== Utility helpers ====== */
+function saveAll() {
+  localStorage.setItem('pages', JSON.stringify(pages));
+  localStorage.setItem('pageSettings', JSON.stringify(pageSettings));
+}
+function slug(name){ return name.replace(/\s+/g,'-').toLowerCase(); }
 
-        // Delete button
-        const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = '🗑';
-        deleteBtn.title = 'Delete this page';
-        deleteBtn.className = 'delete-page-btn';
-        deleteBtn.onclick = (e) => {
-            e.stopPropagation();
-            if(confirm(`Delete page "${name}"?`)) {
-                delete pages[name];
-                delete pageSettings[name];
-                saveAll();
-                if(currentPage === name) currentPage = Object.keys(pages)[0] || null;
-                renderSidebar();
-                renderPage();
-                loadSettings();
-            }
-        };
-        li.appendChild(deleteBtn);
+/* ====== Sidebar rendering ====== */
+function renderSidebar(){
+  const ul = document.getElementById('pagesList');
+  ul.innerHTML = '';
+  Object.keys(pages).forEach(name=>{
+    const li = document.createElement('li');
 
-        ul.appendChild(li);
-    }
+    const span = document.createElement('span');
+    span.textContent = name;
+    span.className = (name===currentPage)?'active':'';
+    span.onclick = ()=>{ currentPage = name; renderPage(); renderSidebar(); loadSettings(); };
+    span.ondblclick = ()=>{
+      const newName = prompt('Rename page:', name);
+      if (!newName || newName===name) return;
+      if (pages[newName]) { alert('A page with that name exists'); return; }
+      pages[newName] = pages[name];
+      pageSettings[newName] = pageSettings[name] || {bgColor:'#ffffff',fontSize:16,customCSS:''};
+      delete pages[name]; delete pageSettings[name];
+      currentPage = newName;
+      saveAll(); renderSidebar(); renderPage(); loadSettings();
+    };
+    li.appendChild(span);
+
+    const actions = document.createElement('div');
+    actions.className = 'page-actions';
+
+    // delete page
+    const delBtn = document.createElement('button');
+    delBtn.innerHTML = '🗑';
+    delBtn.title = 'Delete page';
+    delBtn.className = 'delete-page-btn';
+    delBtn.onclick = (e)=>{
+      e.stopPropagation();
+      if (!confirm(`Delete page "${name}"?`)) return;
+      delete pages[name]; delete pageSettings[name];
+      saveAll();
+      if (currentPage===name) currentPage = Object.keys(pages)[0] || null;
+      renderSidebar(); renderPage(); loadSettings();
+    };
+    actions.appendChild(delBtn);
+    li.appendChild(actions);
+
+    ul.appendChild(li);
+  });
 }
 
-// Render page
-function renderPage() {
-    const content = document.getElementById('content');
-    content.innerHTML = '';
-    if (!currentPage) return;
-    pages[currentPage].forEach((html, index) => {
-        const div = document.createElement('div');
-        div.className = 'box';
-        div.contentEditable = true;
+/* ====== Render current page (hero + boxes) ====== */
+function renderPage(){
+  // apply settings
+  loadSettings();
 
-        // Add inner HTML and buttons
-        div.innerHTML = html + `
-            <br>
-            <button onclick="addImage(this)">Add Image</button>
-            <button onclick="addDocument(this)">Add Document</button>
-            <button onclick="deleteBox(${index})" class="delete-box-btn">Delete Box</button>
-        `;
+  // hero
+  const heroTitle = document.getElementById('heroTitle');
+  const heroSubtitle = document.getElementById('heroSubtitle');
+  // load hero values from first box if present (simple approach)
+  const pageArr = pages[currentPage] || [];
+  // default hero text
+  heroTitle.textContent = currentPage;
+  heroSubtitle.textContent = 'Summary and introduction';
 
-        div.draggable = true;
-        div.addEventListener('dragstart', dragStart);
-        div.addEventListener('dragover', dragOver);
-        div.addEventListener('drop', drop);
-        div.addEventListener('dragend', dragEnd);
-        content.appendChild(div);
-    });
-    applySettings();
+  // content area
+  const content = document.getElementById('contentArea');
+  content.innerHTML = '';
+  if (!pages[currentPage]) { content.innerHTML = '<p class="muted">No content</p>'; return; }
+  pages[currentPage].forEach((html, idx)=>{
+    const card = document.createElement('div');
+    card.className = 'box';
+    card.contentEditable = true;
+
+    // buttons appended to each box
+    card.innerHTML = html + `
+      <div class="box-controls">
+        <button class="btn secondary" onclick="addImage(this)">Add Image</button>
+        <button class="btn secondary" onclick="addDocument(this)">Add Document</button>
+        <button class="btn ghost" onclick="alignImages(this.parentElement, 'left')">Img Left</button>
+        <button class="btn ghost" onclick="alignImages(this.parentElement, 'center')">Img Center</button>
+        <button class="btn ghost" onclick="alignImages(this.parentElement, 'right')">Img Right</button>
+        <button class="delete-box-btn" onclick="deleteBox(${idx})">Delete Box</button>
+      </div>
+    `;
+    // drag events
+    card.draggable = true;
+    card.addEventListener('dragstart', dragStart);
+    card.addEventListener('dragover', dragOver);
+    card.addEventListener('drop', drop);
+    card.addEventListener('dragend', dragEnd);
+
+    content.appendChild(card);
+  });
 }
 
-// Delete box
-function deleteBox(index) {
-    if(!currentPage) return;
-    if(confirm('Delete this content box?')) {
-        pages[currentPage].splice(index, 1);
-        saveAll();
-        renderPage();
-    }
+/* ====== Box management ====== */
+function addBox(){
+  if (!currentPage){ alert('Create a page first'); return; }
+  pages[currentPage].push('<p>New content...</p>');
+  renderPage();
+}
+function deleteBox(idx){
+  if (!confirm('Delete this content box?')) return;
+  pages[currentPage].splice(idx,1); saveAll(); renderPage();
+}
+function savePage(){
+  if (!currentPage) return;
+  const boxes = Array.from(document.querySelectorAll('#contentArea .box'));
+  pages[currentPage] = boxes.map(b=>b.innerHTML.replace(/<div class="box-controls">[\s\S]*?<\/div>$/,'').trim());
+  saveAll(); alert('Saved');
 }
 
-// Drag and drop
-let dragSrcEl = null;
-function dragStart(e) { dragSrcEl = this; e.dataTransfer.effectAllowed = 'move'; }
-function dragOver(e) { e.preventDefault(); if(this!==dragSrcEl) this.classList.add('drag-over'); }
-function drop(e) {
-    e.stopPropagation();
-    if(dragSrcEl!==this){
-        const parent = this.parentNode;
-        const children = Array.from(parent.children);
-        const srcIndex = children.indexOf(dragSrcEl);
-        const targetIndex = children.indexOf(this);
-        if(srcIndex < targetIndex) parent.insertBefore(dragSrcEl,this.nextSibling);
-        else parent.insertBefore(dragSrcEl,this);
-    }
-    this.classList.remove('drag-over');
+/* ====== Drag & drop ordering ====== */
+let dragSrc=null;
+function dragStart(e){ dragSrc=this; e.dataTransfer.effectAllowed='move';}
+function dragOver(e){ e.preventDefault(); if(this!==dragSrc) this.classList.add('drag-over');}
+function drop(e){
+  e.stopPropagation();
+  if (dragSrc!==this){
+    const parent = this.parentNode;
+    const children = Array.from(parent.children);
+    const srcIdx = children.indexOf(dragSrc);
+    const tgtIdx = children.indexOf(this);
+    if (srcIdx < tgtIdx ) parent.insertBefore(dragSrc, this.nextSibling);
+    else parent.insertBefore(dragSrc, this);
+  }
+  this.classList.remove('drag-over');
 }
-function dragEnd(e){ document.querySelectorAll('.box').forEach(b=>b.classList.remove('drag-over')); }
+function dragEnd(){ document.querySelectorAll('.box').forEach(b=>b.classList.remove('drag-over')); }
 
-// Add page
-function addPage() {
-    const name = prompt('Enter new page name:');
-    if (name && !pages[name]) {
-        pages[name] = ['<h1>New Page</h1><p>Edit content...</p>'];
-        pageSettings[name] = {bgColor:'#ffffff', fontSize:16, customCSS:''};
-        currentPage = name;
-        saveAll();
-        renderSidebar();
-        renderPage();
-        loadSettings();
-    } else if (pages[name]) alert('Page name exists!');
+/* ====== Image & Document insertion ====== */
+function addImage(button){
+  const input = document.createElement('input');
+  input.type='file'; input.accept='image/*';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = document.createElement('img');
+      img.src = ev.target.result;
+      img.style.maxWidth = '100%'; img.style.marginTop='8px';
+      // image controls: click to resize
+      const controls = document.createElement('div');
+      controls.className = 'img-controls';
+      controls.innerHTML = `<button onclick="setImgWidth(this,50)">50%</button><button onclick="setImgWidth(this,75)">75%</button><button onclick="setImgWidth(this,100)">100%</button>`;
+      button.parentElement.appendChild(img);
+      button.parentElement.appendChild(controls);
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
 }
-
-// Add box
-function addBox() {
-    if(!currentPage) return alert('Create/select a page first.');
-    pages[currentPage].push('<p>New content box...</p>');
-    renderPage();
-}
-
-// Save page
-function savePage() {
-    if(!currentPage) return;
-    const boxes = document.querySelectorAll('#content .box');
-    pages[currentPage] = Array.from(boxes).map(box => box.innerHTML);
-    saveAll();
-    alert('Page saved!');
+function setImgWidth(btn,pc){
+  const container = btn.parentElement;
+  const img = container.previousElementSibling;
+  if (img && img.tagName==='IMG') img.style.width = pc + '%';
 }
 
-// Save all
-function saveAll(){
-    localStorage.setItem('pages', JSON.stringify(pages));
-    localStorage.setItem('pageSettings', JSON.stringify(pageSettings));
+/* Add document (download link) */
+function addDocument(button){
+  const input=document.createElement('input');
+  input.type='file'; input.accept='*/*';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const a = document.createElement('a');
+      a.href = ev.target.result;
+      a.download = file.name;
+      a.textContent = `Download ${file.name}`;
+      a.style.display='block'; a.style.marginTop='8px';
+      button.parentElement.appendChild(a);
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
 }
 
-// Page settings
+/* Simple image alignment by setting figure style */
+function alignImages(container, pos){
+  const imgs = container.querySelectorAll('img');
+  imgs.forEach(img=>{
+    img.style.display = (pos==='center') ? 'block' : 'inline-block';
+    img.style.margin = (pos==='left') ? '0 12px 8px 0' : (pos==='right') ? '0 0 8px 12px' : '8px auto 0 auto';
+  });
+}
+
+/* ====== Page settings (per-page) ====== */
 function loadSettings(){
-    if(!currentPage) return;
-    const settings = pageSettings[currentPage] || {bgColor:'#ffffff', fontSize:16, customCSS:''};
-    document.getElementById('bgColor').value = settings.bgColor;
-    document.getElementById('fontSize').value = settings.fontSize;
-    document.getElementById('customCSS').value = settings.customCSS;
-    applySettings();
+  if(!currentPage) return;
+  const s = pageSettings[currentPage] || {bgColor:'#ffffff',fontSize:16,customCSS:''};
+  document.getElementById('bgColor').value = s.bgColor;
+  document.getElementById('fontSize').value = s.fontSize;
+  document.getElementById('customCSS').value = s.customCSS;
+  applySettings();
 }
-
 function updateSettings(){
-    if(!currentPage) return;
-    const bgColor = document.getElementById('bgColor').value;
-    const fontSize = document.getElementById('fontSize').value;
-    const customCSS = document.getElementById('customCSS').value;
-    pageSettings[currentPage] = {bgColor,fontSize,customCSS};
-    applySettings();
-    saveAll();
+  if(!currentPage) return;
+  const bg = document.getElementById('bgColor').value;
+  const fs = document.getElementById('fontSize').value;
+  const css = document.getElementById('customCSS').value;
+  pageSettings[currentPage] = {bgColor:bg,fontSize:parseInt(fs)||16,customCSS:css};
+  saveAll(); applySettings();
 }
-
 function applySettings(){
-    if(!currentPage) return;
-    const main = document.getElementById('mainContent');
-    const settings = pageSettings[currentPage];
-    main.style.background = settings.bgColor;
-    main.style.fontSize = settings.fontSize+'px';
-    let customStyle = document.getElementById('customPageStyle');
-    if(!customStyle){
-        customStyle = document.createElement('style');
-        customStyle.id = 'customPageStyle';
-        document.head.appendChild(customStyle);
-    }
-    customStyle.innerHTML = settings.customCSS;
+  if(!currentPage) return;
+  const s = pageSettings[currentPage];
+  document.getElementById('mainContent').style.background = s.bgColor;
+  document.getElementById('mainContent').style.fontSize = s.fontSize + 'px';
+  let node = document.getElementById('customPageStyle');
+  if(!node){ node = document.createElement('style'); node.id = 'customPageStyle'; document.head.appendChild(node); }
+  node.innerHTML = s.customCSS || '';
 }
 
-// Add image
-function addImage(button) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = e => {
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = function(event){
-            const img = document.createElement('img');
-            img.src = event.target.result;
-            img.style.maxWidth = '100%';
-            button.parentElement.appendChild(img);
-        }
-        reader.readAsDataURL(file);
-    }
-    input.click();
+/* ====== Hero editing (simple modal prompt) ====== */
+function editHero(){
+  const title = prompt('Hero title', document.getElementById('heroTitle').textContent);
+  const subtitle = prompt('Hero subtitle', document.getElementById('heroSubtitle').textContent);
+  if(title!==null) document.getElementById('heroTitle').textContent = title;
+  if(subtitle!==null) document.getElementById('heroSubtitle').textContent = subtitle;
 }
 
-// Add document for download
-function addDocument(button) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '*/*';
-    input.onchange = e => {
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = function(event){
-            const a = document.createElement('a');
-            a.href = event.target.result;
-            a.download = file.name;
-            a.textContent = `Download ${file.name}`;
-            a.style.display = 'block';
-            a.style.marginTop = '5px';
-            button.parentElement.appendChild(a);
-        }
-        reader.readAsDataURL(file);
-    }
-    input.click();
+/* ====== Pages (add / export) ====== */
+function addPage(){
+  const name = prompt('New page name');
+  if(!name) return;
+  if (pages[name]) { alert('Page exists'); return; }
+  pages[name] = ['<h1>'+name+'</h1><p>Edit this page.</p>'];
+  pageSettings[name] = {bgColor:'#ffffff',fontSize:16,customCSS:''};
+  currentPage = name;
+  saveAll(); renderSidebar(); renderPage(); loadSettings();
 }
 
-// Export pages
-function exportPages() {
-    savePage();
-    const template = (pageName, bodyContent, settings) => `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${pageName}</title>
-<link rel="stylesheet" href="style.css">
-<style>
-body{margin:0;font-family:Arial;background:${settings.bgColor};font-size:${settings.fontSize}px;}
-${settings.customCSS}
-</style>
-</head>
-<body>
-<div class="site-wrapper">
-  <div class="sidebar">
-    <img src="logo.png" alt="Logo">
-    <h2>My Site</h2>
-    <ul>
-      ${Object.keys(pages).map(name => `<li><a href="${name.replace(/\s+/g,'-')}.html">${name}</a></li>`).join('')}
-    </ul>
-  </div>
-  <main class="main">
-    ${bodyContent}
-  </main>
-</div>
-</body>
-</html>`;
-    
-    for(const name in pages){
-        const bodyContent = pages[name].map(html => `<div class="box">${html}</div>`).join('');
-        const htmlContent = template(name, bodyContent, pageSettings[name]);
-        const blob = new Blob([htmlContent], {type:'text/html'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = name.replace(/\s+/g,'-')+'.html';
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-    alert('All pages exported!');
+/* Export pages as HTML files (download) */
+function exportPages(){
+  // ensure current saved
+  savePage();
+  Object.keys(pages).forEach(name=>{
+    const bodyContent = pages[name].map(html => `<div class="box">${html}</div>`).join('\n');
+    const settings = pageSettings[name] || {bgColor:'#ffffff',fontSize:16,customCSS:''};
+    const full = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>${name}</title><link rel="stylesheet" href="style.css"><style>body{margin:0;font-family:Inter,system-ui,Arial;background:${settings.bgColor};font-size:${settings.fontSize}px;}${settings.customCSS}</style></head>
+      <body><div class="container" style="max-width:1100px;margin:28px auto;padding:0 16px"><div class="hero" style="border-radius:12px;padding:18px;margin-bottom:16px"><h1>${name}</h1></div>
+      <div>${bodyContent}</div><footer style="margin-top:24px;color:#94a3b8">© ${new Date().getFullYear()} Landlord & Tenant</footer></div></body></html>`;
+    const blob = new Blob([full], {type:'text/html'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = slug(name) + '.html';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+  alert('Exported pages as individual HTML files (downloaded).');
 }
 
-renderSidebar();
-renderPage();
-loadSettings();
+/* ====== Init ====== */
+renderSidebar(); renderPage(); loadSettings();
+
+/* Expose save & helper to console for debugging */
+window._pages = pages; window.saveAll = saveAll;
+
 </script>
 </body>
 </html>
